@@ -1,6 +1,6 @@
 image:
   repository: astraluniverse/bank-app-cd
-  tag: "dev"
+  tag: "4b3fa70"
   pullPolicy: IfNotPresent
 
 service:
