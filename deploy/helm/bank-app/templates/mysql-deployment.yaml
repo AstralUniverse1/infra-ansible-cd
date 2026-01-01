@@ -19,6 +19,9 @@ spec:
             - "--default-authentication-plugin={{ .Values.mysql.authPlugin }}"
           ports:
             - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_HOST
+              value: "%"
           envFrom:
             - secretRef:
                 name: bank-mysql-secret
