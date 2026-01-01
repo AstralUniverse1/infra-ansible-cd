@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register Page</title>
+    <link rel="stylesheet" href="/static/styles.css">
+
+    <script>
+        async function SubmitRegister() {
+            const data = {
+                user_id: document.querySelector("[name='user_id']").value,
+                firstName: document.querySelector("[name='firstName']").value,
+                lastName: document.querySelector("[name='lastName']").value,
+                email: document.querySelector("[name='email']").value,
+                password: document.querySelector("[name='password']").value,
+                gender: document.querySelector("[name='gender']").value,
+                birth_date: document.querySelector("[name='birth_date']").value,
+                phone_number: document.querySelector("[name='phone_number']").value,
+                address: document.querySelector("[name='address']").value
+            };
+
+            const res = await fetch("/api/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            });
+
+            const json = await res.json();
+            if (!json.status) {
+                alert(json.text);
+                return;
+            }
+
+            localStorage.setItem("account_number", data.user_id);
+            window.location.href = "/src/account.html";
+        }
+    </script>
+</head>
+
+<body>
+    <form onsubmit="event.preventDefault(); SubmitRegister();">
+        <h1 class="main_header">Register Page</h1>
+
+        <img id="bank_img" src="../images/bank.jpg">
+
+        <input name="user_id" placeholder="ID">
+        <input name="firstName" placeholder="First name">
+        <input name="lastName" placeholder="Last name">
+        <input name="email" placeholder="Email">
+        <input type="password" name="password" placeholder="Password">
+
+        <select name="gender">
+            <option value="">Gender</option>
+            <option>Male</option>
+            <option>Female</option>
+            <option>Other</option>
+        </select>
+
+        <input type="date" name="birth_date">
+        <input name="phone_number" placeholder="Phone">
+        <input name="address" placeholder="Address">
+
+        <button type="submit">Register</button>
+        <a href="/src/login.html">Back to login</a>
+    </form>
+</body>
+</html>

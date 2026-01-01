@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Page</title>
+    <link rel="stylesheet" href="/static/styles.css">
+
+    <script>
+        async function SubmitLogin() {
+            const userId = document.getElementById("bank_id").value;
+            const password = document.getElementById("password").value;
+
+            if (!userId || !password) {
+                alert("Please fill all fields");
+                return;
+            }
+
+            const res = await fetch("/api/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: userId, password })
+            });
+
+            const data = await res.json();
+            if (!data.status) {
+                alert(data.text);
+                return;
+            }
+
+            localStorage.setItem("account_number", userId);
+            window.location.href = "/src/account.html";
+        }
+    </script>
+</head>
+
+<body>
+    <form>
+        <h1 class="main_header">Login Page</h1>
+
+        <img id="bank_img" src="../images/bank.jpg">
+
+        <label>Bank ID</label>
+        <input id="bank_id" type="text">
+
+        <label>Password</label>
+        <input id="password" type="password">
+
+        <button type="button" onclick="SubmitLogin()">Login</button>
+        <a href="/src/register.html">Register</a>
+    </form>
+</body>
+</html>
+

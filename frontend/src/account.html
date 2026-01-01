@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Account Page</title>
+    <link rel="stylesheet" href="/static/styles.css">
+
+    <script>
+        async function loadAccount() {
+            const userId = localStorage.getItem("account_number");
+            if (!userId) {
+                window.location.href = "/src/login.html";
+                return;
+            }
+
+            const res = await fetch("/api/get_user_data", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: userId })
+            });
+
+            const data = await res.json();
+            if (!data.status) {
+                alert(data.text);
+                return;
+            }
+
+            document.getElementById("balance").innerText = data.balance;
+
+            const list = document.getElementById("transactions");
+            list.innerHTML = "";
+            data.transactions.forEach(t => {
+                const li = document.createElement("li");
+                li.innerText = `${t.date} | ${t.type} | ${t.amount}`;
+                list.appendChild(li);
+            });
+        }
+
+        async function withdraw() {
+            const amount = Number(document.getElementById("amount").value);
+            const description = document.getElementById("description").value;
+
+            if (amount <= 0) {
+                alert("Invalid amount");
+                return;
+            }
+
+            const res = await fetch("/api/withdraw", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    user_id: localStorage.getItem("account_number"),
+                    amount,
+                    description
+                })
+            });
+
+            const data = await res.json();
+            if (!data.status) {
+                alert(data.text);
+                return;
+            }
+
+            loadAccount();
+        }
+
+        function logout() {
+            localStorage.removeItem("account_number");
+            window.location.href = "/src/login.html";
+        }
+
+        window.onload = loadAccount;
+    </script>
+</head>
+
+<body>
+    <form>
+        <h1 class="main_header">Account</h1>
+
+        <p>Balance: <strong><span id="balance">0</span></strong></p>
+
+        <h3>Withdraw</h3>
+        <input id="amount" type="number" placeholder="Amount">
+        <input id="description" placeholder="Description">
+        <button type="button" onclick="withdraw()">Withdraw</button>
+
+        <h3>Last Transactions</h3>
+        <ul id="transactions"></ul>
+
+        <a href="/src/transfer.html">Transfer</a><br><br>
+
+        <button type="button" onclick="logout()">Logout</button>
+    </form>
+</body>
+</html>
+
+
