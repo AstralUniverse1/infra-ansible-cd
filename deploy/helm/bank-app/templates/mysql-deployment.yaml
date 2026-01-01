@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bank-mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bank-mysql
+  template:
+    metadata:
+      labels:
+        app: bank-mysql
+    spec:
+      containers:
+        - name: mysql
+          image: {{ .Values.mysql.image }}
+          args:
+            - "--default-authentication-plugin={{ .Values.mysql.authPlugin }}"
+          ports:
+            - containerPort: 3306
+          envFrom:
+            - secretRef:
+                name: bank-mysql-secret
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bank-mysql-pvc
