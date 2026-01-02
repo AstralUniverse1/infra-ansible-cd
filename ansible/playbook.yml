@@ -1,0 +1,279 @@
+---
+
+- name: Configure and initialize Kubernetes control plane
+  hosts: control_plane
+  become: true
+
+  vars:
+    k8s_version_repo: "v1.29"
+    pod_network_cidr: "10.244.0.0/16"
+    flannel_manifest_url: "https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml"
+
+  handlers:
+    - name: restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+  tasks:
+    - name: Ensure apt keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+        update_cache: yes
+
+    - name: Add Kubernetes apt keyring (refresh)
+      shell: |
+        set -euo pipefail
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/{{ k8s_version_repo }}/deb/Release.key           | gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        executable: /bin/bash
+
+    - name: Add Kubernetes apt repo
+      copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ k8s_version_repo }}/deb/ /
+
+    - name: Install kubeadm, kubelet, kubectl (control plane needs kubectl)
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        update_cache: yes
+
+    - name: Install containerd
+      apt:
+        name: containerd
+        update_cache: yes
+
+    - name: Generate containerd config if missing
+      shell: |
+        set -e
+        mkdir -p /etc/containerd
+        containerd config default > /etc/containerd/config.toml
+      args:
+        executable: /bin/bash
+        creates: /etc/containerd/config.toml
+      notify: restart containerd
+
+    - name: Set containerd to use systemd cgroups
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+      notify: restart containerd
+
+    - name: Apply containerd changes now
+      meta: flush_handlers
+
+    - name: Load kernel modules for Kubernetes
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Persist kernel modules
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Set sysctl params for Kubernetes
+      copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward = 1
+
+    - name: Apply sysctl
+      command: sysctl --system
+
+    - name: Disable swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Comment swap in fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(.*\sswap\s.*)$'
+        replace: "# \\1"
+
+    - name: Initialize cluster
+      command: kubeadm init --pod-network-cidr={{ pod_network_cidr }}
+      args:
+        creates: /etc/kubernetes/admin.conf
+
+    - name: Install Flannel CNI
+      command: kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f {{ flannel_manifest_url }}
+      register: flannel_apply
+      changed_when: "'created' in (flannel_apply.stdout | lower) or 'configured' in (flannel_apply.stdout | lower)"
+
+    - name: Wait for control plane node Ready
+      command: kubectl --kubeconfig /etc/kubernetes/admin.conf wait --for=condition=Ready node --all --timeout=300s
+
+    - name: Install default StorageClass (local-path-provisioner)
+      shell: |
+        kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+        kubectl --kubeconfig /etc/kubernetes/admin.conf patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+      args:
+        executable: /bin/bash
+
+    - name: Get worker join command
+      command: kubeadm token create --print-join-command
+      register: join_cmd
+      changed_when: false
+
+
+- name: Configure workers and join them to the cluster
+  hosts: workers
+  become: true
+
+  vars:
+    k8s_version_repo: "v1.29"
+    kube_join_cmd: "{{ hostvars[groups['control_plane'][0]].join_cmd.stdout }}"
+
+  handlers:
+    - name: restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+  tasks:
+    - name: Ensure apt keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+        update_cache: yes
+
+    - name: Add Kubernetes apt keyring (refresh)
+      shell: |
+        set -euo pipefail
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/{{ k8s_version_repo }}/deb/Release.key           | gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        executable: /bin/bash
+
+    - name: Add Kubernetes apt repo
+      copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ k8s_version_repo }}/deb/ /
+
+    - name: Install kubeadm, kubelet (workers don't need kubectl)
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+        update_cache: yes
+
+    - name: Install containerd
+      apt:
+        name: containerd
+        update_cache: yes
+
+    - name: Generate containerd config if missing
+      shell: |
+        set -e
+        mkdir -p /etc/containerd
+        containerd config default > /etc/containerd/config.toml
+      args:
+        executable: /bin/bash
+        creates: /etc/containerd/config.toml
+      notify: restart containerd
+
+    - name: Set containerd to use systemd cgroups
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+      notify: restart containerd
+
+    - name: Apply containerd changes now
+      meta: flush_handlers
+
+    - name: Load kernel modules for Kubernetes
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Persist kernel modules
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Set sysctl params for Kubernetes
+      copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward = 1
+
+    - name: Apply sysctl
+      command: sysctl --system
+
+    - name: Disable swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Comment swap in fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(.*\sswap\s.*)$'
+        replace: "# \\1"
+
+    - name: Join worker to cluster
+      command: "{{ kube_join_cmd }} --cri-socket unix:///var/run/containerd/containerd.sock"
+      args:
+        creates: /var/lib/kubelet/config.yaml
+
+    - name: Ensure kubelet enabled
+      systemd:
+        name: kubelet
+        enabled: yes
+
+    - name: Restart kubelet after join
+      systemd:
+        name: kubelet
+        state: restarted
+
+    - name: Wait for worker to show up in cluster (by internal IP)
+      delegate_to: "{{ groups['control_plane'][0] }}"
+      become: true
+      command: kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
+      register: nodes_wide
+      until: ansible_default_ipv4.address in nodes_wide.stdout
+      retries: 30
+      delay: 5
