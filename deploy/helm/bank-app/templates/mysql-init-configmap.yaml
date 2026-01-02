@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bank-mysql-init
+data:
+  01-init-user.sql: |
+    CREATE USER IF NOT EXISTS '{{ .Values.mysql.user }}'@'%' IDENTIFIED BY '{{ .Values.mysql.password }}';
+    GRANT ALL PRIVILEGES ON `{{ .Values.mysql.database }}`.* TO '{{ .Values.mysql.user }}'@'%';
+    FLUSH PRIVILEGES;
