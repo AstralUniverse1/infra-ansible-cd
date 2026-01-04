@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: astraluniverse/bank-app-cd
-  tag: "cad7a85"
+  tag: "1043196"
   pullPolicy: IfNotPresent
 
 service:
