@@ -40,7 +40,7 @@ jobs:
         run: |
           python - <<'PY'
           import re, pathlib, os
-          p = pathlib.Path("deploy/helm/bank-app/values.yaml")
+          p = pathlib.Path("helm/bank-app-cd/values.yaml")
           s = p.read_text()
           s = re.sub(r'(?m)^(\s*tag:\s*)".*"$', r'\1"'+os.environ["TAG"]+'"', s)
           p.write_text(s)
@@ -52,7 +52,7 @@ jobs:
         run: |
           python - <<'PY'
           import re, pathlib
-          p = pathlib.Path("deploy/helm/bank-app/Chart.yaml")
+          p = pathlib.Path("helm/bank-app-cd/Chart.yaml")
           s = p.read_text()
           m = re.search(r'(?m)^version:\s*(\d+)\.(\d+)\.(\d+)\s*$', s)
           if not m:
@@ -67,7 +67,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add deploy/helm/bank-app/Chart.yaml deploy/helm/bank-app/values.yaml
+          git add helm/bank-app-cd/Chart.yaml helm/bank-app-cd/values.yaml
           git commit -m "chore(cd): release ${TAG}" || exit 0
           git push
         env:

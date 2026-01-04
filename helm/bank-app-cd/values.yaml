@@ -1,3 +1,5 @@
+replicaCount: 1
+
 image:
   repository: astraluniverse/bank-app-cd
   tag: "4b3fa70"
@@ -9,12 +11,3 @@ service:
   targetPort: 5000
   nodePort: 32172
 
-mysql:
-  image: mysql:8.0
-  authPlugin: mysql_native_password
-  database: bank
-  user: bank
-  password: bankpass
-  rootPassword: rootpass
-  persistence:
-    size: 1Gi
